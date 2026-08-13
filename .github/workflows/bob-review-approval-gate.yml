@@ -1,0 +1,23 @@
+name: Bob Review Approval Gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-bob-review-approval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify IBM Bob Review receipt has been cleared
+        run: |
+          if find .bob-review -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null | grep -q .; then
+            echo "::error::An IBM Bob Review receipt still exists in .bob-review/ on this PR."
+            echo "Once this PR has been reviewed and approved, add the 'clear-bob-receipt' label to remove it and unblock merge."
+            exit 1
+          fi
+
+          echo "No IBM Bob Review receipt present — nothing to clear."
+          exit 0
