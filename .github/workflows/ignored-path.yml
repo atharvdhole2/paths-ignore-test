@@ -1,0 +1,10 @@
+name: ignored-path
+  on:
+    pull_request:
+      paths-ignore:
+        - 'ignored/**'
+  jobs:
+    check:
+      runs-on: ubuntu-latest
+      steps:
+        - run: echo "ok"
