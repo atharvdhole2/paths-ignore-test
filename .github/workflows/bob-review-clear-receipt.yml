@@ -1,0 +1,43 @@
+name: Clear Bob Review Receipt
+
+# Companion to bob-review-approval-gate.yml: once a PR has been reviewed and
+# a human approves it, adding the "clear-bob-receipt" label triggers this
+# workflow to delete the review receipt from .bob-review/ and push that
+# commit directly to the PR branch — unblocking the approval gate without
+# requiring anyone to delete the file by hand.
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  clear-receipt:
+    if: github.event.label.name == 'clear-bob-receipt'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Delete receipt and push
+        run: |
+          if ! find .bob-review -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null | grep -q .; then
+            echo "No receipt present in .bob-review/ — nothing to clear."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          find .bob-review -maxdepth 1 -type f ! -name '.gitkeep' -delete
+          git add .bob-review
+          git commit -m "bob-review: clear receipt (cleared via label)"
+          git push
+
+      - name: Remove the triggering label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" --remove-label "clear-bob-receipt"
