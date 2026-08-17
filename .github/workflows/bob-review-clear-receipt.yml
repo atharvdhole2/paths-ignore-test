@@ -17,9 +17,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          gh api "repos/${{ github.repository }}/check-runs" \
-            -f name='check-bob-review-approval' \
-            -f head_sha="$HEAD_SHA" \
+          CHECK_RUN_ID=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs" \
+            --jq '.check_runs[] | select(.name=="check-bob-review-approval" and (.html_url | contains("/actions/runs/"))) | .id' | head -1)
+
+          if [ -z "$CHECK_RUN_ID" ]; then
+            echo "::error::Could not find the original check-bob-review-approval check run to update."
+            exit 1
+          fi
+
+          gh api "repos/${{ github.repository }}/check-runs/$CHECK_RUN_ID" -X PATCH \
             -f status='completed' \
             -f conclusion='success'
 
@@ -27,4 +33,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr edit "${{ github.event.pull_request.number }}" --remove-label "clear-bob-receipt"
+          gh pr edit "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --remove-label "clear-bob-receipt"
