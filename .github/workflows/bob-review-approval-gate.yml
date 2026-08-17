@@ -1,23 +1,40 @@
 name: Bob Review Approval Gate
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   check-bob-review-approval:
+    if: github.event.action != 'labeled' || github.event.label.name == 'clear-bob-receipt'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify IBM Bob Review receipt has been cleared
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          has_receipt=0
           if find .bob-review -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null | grep -q .; then
-            echo "::error::An IBM Bob Review receipt still exists in .bob-review/ on this PR."
-            echo "Once this PR has been reviewed and approved, add the 'clear-bob-receipt' label to remove it and unblock merge."
-            exit 1
+            has_receipt=1
           fi
 
-          echo "No IBM Bob Review receipt present — nothing to clear."
-          exit 0
+          if [ "$has_receipt" -eq 0 ]; then
+            echo "No IBM Bob Review receipt present — nothing to clear."
+            exit 0
+          fi
+
+          if gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '.labels[].name' | grep -qx "clear-bob-receipt"; then
+            echo "Receipt still exists, but clear-bob-receipt label confirms it's been cleared by a human."
+            gh pr edit "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --remove-label "clear-bob-receipt"
+            exit 0
+          fi
+
+          echo "::error::An IBM Bob Review receipt still exists in .bob-review/ on this PR."
+          echo "Once this PR has been reviewed and approved, add the 'clear-bob-receipt' label to unblock merge."
+          exit 1
